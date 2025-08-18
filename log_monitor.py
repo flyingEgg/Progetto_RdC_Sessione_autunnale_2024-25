@@ -23,7 +23,7 @@ class SuricataAnalyzer:
 
     def fetch_logs(self):
         try:
-            stdin, stdout, stderr = self.ssh_client.exec_command(f"cat /var/log/suricata/eve.json")
+            stdin, stdout, stderr = self.ssh_client.exec_command(f"tail -n 100 /var/log/suricata/eve.json")
 
             events = []
             for line in stdout:
@@ -34,6 +34,7 @@ class SuricataAnalyzer:
                     continue
 
                 print(f"Recuperati {len(events)} eventi da analizzare")
+                print(events)
                 return events
         except Exception as e:
             print(f"Errore di lettura log: {e}")
@@ -48,3 +49,9 @@ class SuricataAnalyzer:
     def close_conn(self):
         self.ssh_client.close()
 
+
+if __name__ == "__main__":
+    analyzer = SuricataAnalyzer()
+    analyzer.connect_ssh()
+    analyzer.fetch_logs()
+    analyzer.close_conn()
