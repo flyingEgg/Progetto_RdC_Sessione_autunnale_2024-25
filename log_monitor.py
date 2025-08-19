@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict, Counter
 
 import paramiko
 
@@ -9,6 +10,18 @@ class SuricataAnalyzer:
         self.ssh_port = ssh_port
         self.ssh_user = ssh_user
         self.ssh_pass = ssh_pass
+
+        # Datasets per behavioural analysis
+        self.ip_alerts = defaultdict(list)
+        self.ip_attack_types = defaultdict(Counter)
+
+        self.TIME_WINDOW      = 300         # 5 minuti
+        self.ALERT_THREESHOLD = 10          # nr. max di alert entro la time window
+        self.SUSPICIOUS_KEYWORDS =  [
+            'scan', 'brute', 'trojan',
+            'attack', 'malware', 'exploit',
+            'intrusion'
+        ]
 
     def connect_ssh(self):
         try:
@@ -46,8 +59,13 @@ class SuricataAnalyzer:
     # print(log_data)
     # decoded_log_data = json.loads(log_data)
 
+    def analyze_events(self, event):
+
     def close_conn(self):
         self.ssh_client.close()
+        print("Connessione SSH chiusa")
+
+
 
 
 if __name__ == "__main__":
