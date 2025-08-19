@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict, Counter
+from datetime import datetime
 
 import paramiko
 
@@ -34,9 +35,9 @@ class ProtectionSystem:
             print(f"Errore di connessione ad SSH: {e}")
             return False
 
-    def fetch_recent_events(self):
+    def fetch_recent_events(self, lines=200):
         try:
-            stdin, stdout, stderr = self.ssh_client.exec_command(f"cat /var/log/suricata/eve.json")
+            stdin, stdout, stderr = self.ssh_client.exec_command(f"tail -n {lines} /var/log/suricata/eve.json")
 
             events = []
             for line in stdout:
@@ -53,13 +54,30 @@ class ProtectionSystem:
             print(f"Errore di lettura log: {e}")
             return []
 
-    # stdin, stdout, stderr = ssh_client.exec_command("tail -n 100 /var/log/suricata/eve.json")
-    # log_data = stdout.read().decode()
-    #
-    # print(log_data)
-    # decoded_log_data = json.loads(log_data)
+    def analyze_events(self, events):
+        current_time = datetime.now()
+        threats = []
 
-    # def analyze_events(self, event):
+        for event in events:
+            src_ip = event.get('src_ip')
+            if not src_ip:
+                continue
+
+            # non so se ignorare ip domestici, ci penserò
+
+
+            # Parsing del timestamp con conversione in oggetto datetime
+            try:
+                timestamp_str = event.get('timestamp', '')
+
+                # Converto la stringa in oggetto di classe datetime solo se conforme allo standard ISO 8601
+                if 'T' in timestamp_str:
+                    event_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                else:
+                    event_time = current_time
+            except:
+                event_time = current_time
+
 
     def close_conn(self):
         self.ssh_client.close()
