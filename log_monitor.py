@@ -23,7 +23,7 @@ class SuricataAnalyzer:
 
     def fetch_logs(self):
         try:
-            stdin, stdout, stderr = self.ssh_client.exec_command(f"tail -n 100 /var/log/suricata/eve.json")
+            stdin, stdout, stderr = self.ssh_client.exec_command(f"cat /var/log/suricata/eve.json")
 
             events = []
             for line in stdout:
@@ -33,9 +33,9 @@ class SuricataAnalyzer:
                 except json.decoder.JSONDecodeError:
                     continue
 
-                print(f"Recuperati {len(events)} eventi da analizzare")
-                print(events)
-                return events
+            print(f"Recuperati {len(events)} eventi da analizzare")
+            # print(events)
+            return events
         except Exception as e:
             print(f"Errore di lettura log: {e}")
             return []
