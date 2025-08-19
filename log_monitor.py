@@ -34,7 +34,7 @@ class ProtectionSystem:
             print(f"Errore di connessione ad SSH: {e}")
             return False
 
-    def fetch_logs(self):
+    def fetch_recent_events(self):
         try:
             stdin, stdout, stderr = self.ssh_client.exec_command(f"cat /var/log/suricata/eve.json")
 
@@ -88,6 +88,6 @@ if __name__ == "__main__":
         print("Username o password non corretti.")
     else:
         protection_sys.connect_ssh()
-        protection_sys.fetch_logs()
+        protection_sys.fetch_recent_events()
         # protection_sys.analyze_events()
         protection_sys.close_conn()
