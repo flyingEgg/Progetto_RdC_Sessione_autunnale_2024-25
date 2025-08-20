@@ -1,4 +1,5 @@
 import json
+import socket
 from collections import defaultdict, Counter
 from datetime import datetime
 
@@ -32,6 +33,7 @@ def analyze_events(events):
 
 class ProtectionSystem:
     def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass):
+        self.ssh_client = None
         self.ssh_host = ssh_host
         self.ssh_port = ssh_port
         self.ssh_user = ssh_user
@@ -49,15 +51,25 @@ class ProtectionSystem:
             'intrusion'
         ]
 
+    # Stabilisce una connessione SSH ad OPNsense
     def connect_ssh(self):
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            self.ssh_client.connect(self.ssh_host, self.ssh_port, self.ssh_user, self.ssh_pass)
+            self.ssh_client.connect(self.ssh_host, self.ssh_port, self.ssh_user, self.ssh_pass, timeout=10)
             print("Connesso ad SSH")
             return True
+        except paramiko.AuthenticationException:
+            print("Errore di autenticazione SSH")
+            return False
+        except socket.timeout:
+            print("Timeout: host irraggiungibile")
+            return False
+        except paramiko.SSHException as e:
+            print(f"Errore SSH: {e}")
+            return False
         except Exception as e:
-            print(f"Errore di connessione ad SSH: {e}")
+            print(f"Errore generale di connessione ad SSH: {e}")
             return False
 
     def fetch_recent_events(self, lines=200):
@@ -89,10 +101,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Sistema di protezione ed analisi comportamentale')
 
-    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.1.250)', default='192.168.1.250')
+    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.1.250)', default='192.168.1.25')
     parser.add_argument('--port', type=int, help='Porta SSH (default: 22)', default=22)
-    parser.add_argument('--user', type=str, help='Username', default="root")
-    parser.add_argument('--pwrd', type=str, help='Password', default="opnsense")
+    parser.add_argument('--user', type=str, help='Username')
+    parser.add_argument('--pwrd', type=str, help='Password')
     parser.add_argument('--treeshold', type=int, help='Soglia di tempo alert (default: 5)', default=5)
 
     args = parser.parse_args()
@@ -102,9 +114,6 @@ if __name__ == "__main__":
     protection_sys = ProtectionSystem(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd)
     protection_sys.ALERT_THREESHOLD = args.treeshold
 
-    if args.user is None or args.pwrd is None:
-        print("Username o password non corretti.")
-    else:
-        protection_sys.connect_ssh()
+    if protection_sys.connect_ssh():
         analyze_events(protection_sys.fetch_recent_events())
         protection_sys.close_conn()
