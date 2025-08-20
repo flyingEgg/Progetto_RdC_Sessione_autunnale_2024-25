@@ -27,7 +27,7 @@ def analyze_events(events):
                 event_time = current_time
         except(ValueError, AttributeError):
             event_time = current_time
-        print(event_time)
+        # print(event_time)
 
 
 class ProtectionSystem:
@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Sistema di protezione ed analisi comportamentale')
 
-    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.54.1)', default='192.168.1.250')
+    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.1.250)', default='192.168.1.250')
     parser.add_argument('--port', type=int, help='Porta SSH (default: 22)', default=22)
     parser.add_argument('--user', type=str, help='Username', default="root")
     parser.add_argument('--pwrd', type=str, help='Password', default="opnsense")
