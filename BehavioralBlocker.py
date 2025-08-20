@@ -6,32 +6,8 @@ from datetime import datetime
 import paramiko
 
 
-def analyze_events(events):
-    from dateutil import parser
 
-    current_time = datetime.now()
-    threats = []
-
-    for event in events:
-        src_ip = event.get('src_ip')
-        if not src_ip:
-            continue
-
-        # non so se ignorare ip domestici, ci penserò
-
-        # Parsing del timestamp con conversione in oggetto datetime
-        try:
-            timestamp_str = event.get('timestamp', '')
-            if timestamp_str:
-                event_time = parser.isoparse(timestamp_str)
-            else:
-                event_time = current_time
-        except(ValueError, AttributeError):
-            event_time = current_time
-        # print(event_time)
-
-
-class ProtectionSystem:
+class BehavioralBlocker:
     def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass):
         self.ssh_client = None
         self.ssh_host = ssh_host
@@ -45,13 +21,16 @@ class ProtectionSystem:
 
         self.TIME_WINDOW = 300  # 5 minuti
         self.ALERT_THREESHOLD = 10  # nr. max di alert entro la time window
-        self.SUSPICIOUS_KEYWORDS = [
-            'scan', 'brute', 'trojan',
-            'attack', 'malware', 'exploit',
-            'intrusion'
-        ]
+        # self.SUSPICIOUS_KEYWORDS = [
+        #     'scan', 'brute', 'trojan',
+        #     'attack', 'malware', 'exploit',
+        #     'intrusion', 'port scan', 'brute force'
+        # ]
+        print("Behavioral Blocker avviato")
+        print(f"Soglia: {self.ALERT_THREESHOLD}, alert in {self.TIME_WINDOW} secondi")
 
-    # Stabilisce una connessione SSH ad OPNsense
+
+    # Stabilisco una connessione SSH ad OPNsense e gestisco errori nella connessione
     def connect_ssh(self):
         try:
             self.ssh_client = paramiko.SSHClient()
@@ -72,6 +51,8 @@ class ProtectionSystem:
             print(f"Errore generale di connessione ad SSH: {e}")
             return False
 
+
+    # Restituisco una lista degli ultimi 200 eventi dal log, se vi sono errori di lettura restituisco la lista vuota
     def fetch_recent_events(self, lines=200):
         try:
             stdin, stdout, stderr = self.ssh_client.exec_command(f"tail -n {lines} /var/log/suricata/eve.json")
@@ -90,6 +71,30 @@ class ProtectionSystem:
         except Exception as e:
             print(f"Errore di lettura log: {e}")
             return []
+
+    def analyze_events(events):
+        from dateutil import parser
+
+        current_time = datetime.now()
+        threats = []
+
+        for event in events:
+            src_ip = event.get('src_ip')
+            if not src_ip:
+                continue
+
+            # non so se ignorare ip domestici, ci penserò
+
+            # Parsing del timestamp con conversione in oggetto datetime
+            try:
+                timestamp_str = event.get('timestamp', '')
+                if timestamp_str:
+                    event_time = parser.isoparse(timestamp_str)
+                else:
+                    event_time = current_time
+            except(ValueError, AttributeError):
+                event_time = current_time
+            # print(event_time)
 
     def close_conn(self):
         self.ssh_client.close()
@@ -111,7 +116,7 @@ if __name__ == "__main__":
 
     print(args.host, "\n", args.port, "\n", args.user, "\n", args.pwrd, "\n")
 
-    protection_sys = ProtectionSystem(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd)
+    protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd)
     protection_sys.ALERT_THREESHOLD = args.treeshold
 
     if protection_sys.connect_ssh():
