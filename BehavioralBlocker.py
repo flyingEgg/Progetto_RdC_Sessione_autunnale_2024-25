@@ -2,6 +2,7 @@ import json
 import socket
 from collections import defaultdict, Counter
 from datetime import datetime
+from unittest import case
 
 import paramiko
 
@@ -72,18 +73,19 @@ class BehavioralBlocker:
             print(f"Errore di lettura log: {e}")
             return []
 
-    def analyze_events(events):
+    def analyze_events(self, events):
         from dateutil import parser
 
         current_time = datetime.now()
         threats = []
 
+        # Salta eventi malformati senza campo 'src_ip'
         for event in events:
             src_ip = event.get('src_ip')
             if not src_ip:
                 continue
 
-            # non so se ignorare ip domestici, ci penserò
+                # ____________________________________________________________________ non so se ignorare ip domestici, ci penserò
 
             # Parsing del timestamp con conversione in oggetto datetime
             try:
@@ -96,6 +98,27 @@ class BehavioralBlocker:
                 event_time = current_time
             # print(event_time)
 
+
+            # Analisi del tipo di attacco
+            alert_info = event.get('alert', {})
+            signature = alert_info.get('signature', '').lower()
+
+
+            # Classifico il tipo di attacco
+            def get_attack_type(signature):
+                if any(word in signature for word in ['scan', 'reconnaissance', 'nmap', 'port']):
+                    return 'portscan'
+                elif any(word in signature for word in ['brute', 'force', 'login']):
+                    return 'bruteforce'
+                elif any(word in signature for word in ['exploit', 'attack', 'payload']):
+                    return 'exploit'
+                return 'unknown'
+
+            attack_type = get_attack_type(signature)
+            print(attack_type)
+
+
+
     def close_conn(self):
         self.ssh_client.close()
         print("Connessione ad SSH chiusa")
@@ -106,10 +129,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Sistema di protezione ed analisi comportamentale')
 
-    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.1.250)', default='192.168.1.25')
+    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.1.250)', default='192.168.1.250')
     parser.add_argument('--port', type=int, help='Porta SSH (default: 22)', default=22)
-    parser.add_argument('--user', type=str, help='Username')
-    parser.add_argument('--pwrd', type=str, help='Password')
+    parser.add_argument('--user', type=str, help='Username', default='root')
+    parser.add_argument('--pwrd', type=str, help='Password', default='opnsense')
     parser.add_argument('--treeshold', type=int, help='Soglia di tempo alert (default: 5)', default=5)
 
     args = parser.parse_args()
@@ -120,5 +143,6 @@ if __name__ == "__main__":
     protection_sys.ALERT_THREESHOLD = args.treeshold
 
     if protection_sys.connect_ssh():
-        analyze_events(protection_sys.fetch_recent_events())
+        
+        protection_sys.analyze_events(protection_sys.fetch_recent_events())
         protection_sys.close_conn()
