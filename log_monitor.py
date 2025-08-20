@@ -5,6 +5,31 @@ from datetime import datetime
 import paramiko
 
 
+def analyze_events(events):
+    from dateutil import parser
+
+    current_time = datetime.now()
+    threats = []
+
+    for event in events:
+        src_ip = event.get('src_ip')
+        if not src_ip:
+            continue
+
+        # non so se ignorare ip domestici, ci penserò
+
+        # Parsing del timestamp con conversione in oggetto datetime
+        try:
+            timestamp_str = event.get('timestamp', '')
+            if timestamp_str:
+                event_time = parser.isoparse(timestamp_str)
+            else:
+                event_time = current_time
+        except(ValueError, AttributeError):
+            event_time = current_time
+        print(event_time)
+
+
 class ProtectionSystem:
     def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass):
         self.ssh_host = ssh_host
@@ -54,31 +79,6 @@ class ProtectionSystem:
             print(f"Errore di lettura log: {e}")
             return []
 
-    def analyze_events(self, events):
-        current_time = datetime.now()
-        threats = []
-
-        for event in events:
-            src_ip = event.get('src_ip')
-            if not src_ip:
-                continue
-
-            # non so se ignorare ip domestici, ci penserò
-
-
-            # Parsing del timestamp con conversione in oggetto datetime
-            try:
-                timestamp_str = event.get('timestamp', '')
-
-                # Converto la stringa in oggetto di classe datetime solo se conforme allo standard ISO 8601
-                if 'T' in timestamp_str:
-                    event_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                else:
-                    event_time = current_time
-            except:
-                event_time = current_time
-
-
     def close_conn(self):
         self.ssh_client.close()
         print("Connessione ad SSH chiusa")
@@ -89,10 +89,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Sistema di protezione ed analisi comportamentale')
 
-    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.54.1)', default='192.168.54.1')
+    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.54.1)', default='192.168.1.250')
     parser.add_argument('--port', type=int, help='Porta SSH (default: 22)', default=22)
-    parser.add_argument('--user', type=str, help='Username')
-    parser.add_argument('--pwrd', type=str, help='Password')
+    parser.add_argument('--user', type=str, help='Username', default="root")
+    parser.add_argument('--pwrd', type=str, help='Password', default="opnsense")
     parser.add_argument('--treeshold', type=int, help='Soglia di tempo alert (default: 5)', default=5)
 
     args = parser.parse_args()
@@ -106,6 +106,5 @@ if __name__ == "__main__":
         print("Username o password non corretti.")
     else:
         protection_sys.connect_ssh()
-        protection_sys.fetch_recent_events()
-        # protection_sys.analyze_events()
+        analyze_events(protection_sys.fetch_recent_events())
         protection_sys.close_conn()
