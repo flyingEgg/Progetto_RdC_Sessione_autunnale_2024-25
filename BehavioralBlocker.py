@@ -9,7 +9,7 @@ import paramiko
 
 
 class BehavioralBlocker:
-    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass):
+    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, treeshold):
         self.ssh_client = None
         self.ssh_host = ssh_host
         self.ssh_port = ssh_port
@@ -21,12 +21,8 @@ class BehavioralBlocker:
         self.ip_attack_types = defaultdict(Counter)
 
         self.TIME_WINDOW = 300  # 5 minuti
-        self.ALERT_THREESHOLD = 10  # nr. max di alert entro la time window
-        # self.SUSPICIOUS_KEYWORDS = [
-        #     'scan', 'brute', 'trojan',
-        #     'attack', 'malware', 'exploit',
-        #     'intrusion', 'port scan', 'brute force'
-        # ]
+        self.ALERT_THREESHOLD = treeshold  # nr. max di alert entro la time window
+
         print("Behavioral Blocker avviato")
         print(f"Soglia: {self.ALERT_THREESHOLD}, alert in {self.TIME_WINDOW} secondi")
 
@@ -52,6 +48,18 @@ class BehavioralBlocker:
             print(f"Errore generale di connessione ad SSH: {e}")
             return False
 
+    def parse_timestamp(self, event):
+        from dateutil import parser
+
+        # Parsing del timestamp con conversione in oggetto datetime
+        try:
+            timestamp_str = event.get('timestamp', '')
+            if timestamp_str:
+                return parser.isoparse(timestamp_str)
+            else:
+                return datetime.now()
+        except(ValueError, AttributeError):
+            return datetime.now()
 
     # Restituisco una lista degli ultimi 200 eventi dal log, se vi sono errori di lettura restituisco la lista vuota
     def fetch_recent_events(self, lines=200):
@@ -74,9 +82,6 @@ class BehavioralBlocker:
             return []
 
     def analyze_events(self, events):
-        from dateutil import parser
-
-        current_time = datetime.now()
         threats = []
 
         # Salta eventi malformati senza campo 'src_ip'
@@ -88,16 +93,8 @@ class BehavioralBlocker:
                 # ____________________________________________________________________ non so se ignorare ip domestici, ci penserò
 
             # Parsing del timestamp con conversione in oggetto datetime
-            try:
-                timestamp_str = event.get('timestamp', '')
-                if timestamp_str:
-                    event_time = parser.isoparse(timestamp_str)
-                else:
-                    event_time = current_time
-            except(ValueError, AttributeError):
-                event_time = current_time
-            # print(event_time)
-
+            event_time = self.parse_timestamp(event)
+            print(event_time)
 
             # Analisi del tipo di attacco
             alert_info = event.get('alert', {})
@@ -139,10 +136,15 @@ if __name__ == "__main__":
 
     print(args.host, "\n", args.port, "\n", args.user, "\n", args.pwrd, "\n")
 
-    protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd)
+    protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd, treeshold=args.treeshold)
     protection_sys.ALERT_THREESHOLD = args.treeshold
 
+    print (protection_sys.ALERT_THREESHOLD)
     if protection_sys.connect_ssh():
-        
-        protection_sys.analyze_events(protection_sys.fetch_recent_events())
+
+        try:
+            while True:
+                protection_sys.analyze_events(protection_sys.fetch_recent_events())
+        except KeyboardInterrupt:
+            pass
         protection_sys.close_conn()
