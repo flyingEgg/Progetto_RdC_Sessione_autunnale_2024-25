@@ -1,5 +1,6 @@
 import json
 import socket
+import time
 from collections import defaultdict, Counter
 from datetime import datetime
 from unittest import case
@@ -114,12 +115,37 @@ class BehavioralBlocker:
             attack_type = get_attack_type(signature)
             print(attack_type)
 
+        return threats
 
+    def continuous_monitoring(self, connected):
+        try:
+            while True:
+                if not connected:
+                    print("Connessione SSH fallita! Riprovo tra 30 secondi...")
+                    time.sleep(30)
+                    continue
+
+                events = self.fetch_recent_events()
+
+                if events:
+                    threats = self.analyze_events(events)
+
+                for threat in threats:
+                    if threat['risk_level'] == 'HIGH':
+                        self.block_ip(threat)
+                    else:
+                        print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
+
+
+        except KeyboardInterrupt:
+            pass
+
+    def block_ip(self, threat_addr):
+        sas = 2
 
     def close_conn(self):
         self.ssh_client.close()
         print("Connessione ad SSH chiusa")
-
 
 if __name__ == "__main__":
     import argparse
@@ -138,13 +164,11 @@ if __name__ == "__main__":
 
     protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd, treeshold=args.treeshold)
     protection_sys.ALERT_THREESHOLD = args.treeshold
+    # print (protection_sys.ALERT_THREESHOLD)
 
-    print (protection_sys.ALERT_THREESHOLD)
-    if protection_sys.connect_ssh():
+    connected = protection_sys.connect_ssh()
 
-        try:
-            while True:
-                protection_sys.analyze_events(protection_sys.fetch_recent_events())
-        except KeyboardInterrupt:
-            pass
+    if connected:
+
+        protection_sys.continuous_monitoring(connected)
         protection_sys.close_conn()
