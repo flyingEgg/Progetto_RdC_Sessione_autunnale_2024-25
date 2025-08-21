@@ -3,9 +3,7 @@ import socket
 import time
 from collections import defaultdict, Counter
 from datetime import datetime
-
 import paramiko
-
 
 class BehavioralBlocker:
     def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, treeshold):
@@ -18,7 +16,13 @@ class BehavioralBlocker:
         # Datasets per behavioural analysis
         self.ip_alerts = defaultdict(list)
         self.ip_attack_types = defaultdict(Counter)
+        self.blocked_ips = set()
 
+        # Duplicazioni
+        self.processed_events = set()
+        self.last_event_time = None
+
+        # Soglie
         self.TIME_WINDOW = 300  # 5 minuti
         self.ALERT_THREESHOLD = treeshold  # nr. max di alert entro la time window
 
@@ -74,19 +78,49 @@ class BehavioralBlocker:
     def fetch_recent_events(self, lines=200):
         """Restituisco una lista degli ultimi 200 eventi dal log, se vi sono errori di lettura restituisco la lista vuota"""
         try:
-            stdin, stdout, stderr = self.ssh_client.exec_command(f"tail -n {lines} /var/log/suricata/eve.json")
+            if self.last_event_time:
+                cmd = f'tail -n 500 /var/log/suricata/eve.json | grep -v "^$"'
+            else:
+                cmd = f'tail -n {lines} /var/log/suricata/eve.json'
+
+            stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
 
             events = []
+            new_events = 0
             for line in stdout:
                 try:
                     event = json.loads(line.strip())
+                    if event.get('event_type') != 'alert':
+                        continue
+
+                    event_id = self.create_event_id(event)
+
+                    # Salta evento se già precedentemente processato
+                    if event_id in self.processed_events:
+                        continue
+
+                    event_time = self.parse_timestamp(event)
+
+                    # Salta vecchi eventi se presente il periodo dell'ultimo evento
+                    if self.last_event_time and event_time <= self.last_event_time:
+                        continue
+
+                    # Se arrivo qui, significa che l'evento è nuovo
                     events.append(event)
-                except json.decoder.JSONDecodeError:
+                    self.processed_events.add(event_id)
+                    new_events += 1
+
+                    # Aggiorno il periodo dell'ultimo evento
+                    if self.last_event_time or event_time > self.last_event_time:
+                        self.last_event_time = event_time
+
+                except Exception:
                     continue
 
-            print(f"Recuperati {len(events)} eventi da analizzare")
+            print(f"[{datetime.now()}] --> Recuperati {new_events} eventi nuovi da analizzare (eventi totali: {len(events)})")
             # print(events)
             return events
+
         except Exception as e:
             print(f"Errore di lettura log: {e}")
             return []
@@ -136,14 +170,16 @@ class BehavioralBlocker:
 
                 events = self.fetch_recent_events()
 
-                if events:
-                    threats = self.analyze_events(events)
+                time.sleep(10)
 
-                for threat in threats:
-                    if threat['risk_level'] == 'HIGH':
-                        self.block_ip(threat)
-                    else:
-                        print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
+                # if events:
+                #     threats = self.analyze_events(events)
+                #
+                # for threat in threats:
+                #     if threat['risk_level'] == 'HIGH':
+                #         self.block_ip(threat)
+                #     else:
+                #         print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
 
 
         except KeyboardInterrupt:
@@ -154,7 +190,7 @@ class BehavioralBlocker:
 
     def close_conn(self):
         self.ssh_client.close()
-        print("Connessione ad SSH chiusa")
+        print("\nConnessione ad SSH chiusa")
 
 if __name__ == "__main__":
     import argparse
