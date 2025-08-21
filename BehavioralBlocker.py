@@ -3,10 +3,8 @@ import socket
 import time
 from collections import defaultdict, Counter
 from datetime import datetime
-from unittest import case
 
 import paramiko
-
 
 
 class BehavioralBlocker:
@@ -73,8 +71,8 @@ class BehavioralBlocker:
         unique_id = f"f{timestamp}_{ip}_{signature}_{dest_port}"
         return hashlib.md5(unique_id.encode()).hexdigest()
 
-    # Restituisco una lista degli ultimi 200 eventi dal log, se vi sono errori di lettura restituisco la lista vuota
     def fetch_recent_events(self, lines=200):
+        """Restituisco una lista degli ultimi 200 eventi dal log, se vi sono errori di lettura restituisco la lista vuota"""
         try:
             stdin, stdout, stderr = self.ssh_client.exec_command(f"tail -n {lines} /var/log/suricata/eve.json")
 
