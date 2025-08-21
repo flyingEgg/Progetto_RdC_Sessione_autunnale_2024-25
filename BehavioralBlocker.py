@@ -50,9 +50,9 @@ class BehavioralBlocker:
             return False
 
     def parse_timestamp(self, event):
+        """Parsing del timestamp con conversione in oggetto datetime"""
         from dateutil import parser
 
-        # Parsing del timestamp con conversione in oggetto datetime
         try:
             timestamp_str = event.get('timestamp', '')
             if timestamp_str:
@@ -61,6 +61,17 @@ class BehavioralBlocker:
                 return datetime.now()
         except(ValueError, AttributeError):
             return datetime.now()
+
+    def create_event_id(self, event):
+        """Crea un id univoco basato su timestamp, ip e signature per evitare duplicati"""
+        timestamp = event.get('timestamp', '')
+        ip = event.get('src_ip', '')
+        signature = event.get('alert', {}).get('signature', '')
+        dest_port = event.get('dest_port', '')
+
+        import hashlib
+        unique_id = f"f{timestamp}_{ip}_{signature}_{dest_port}"
+        return hashlib.md5(unique_id.encode()).hexdigest()
 
     # Restituisco una lista degli ultimi 200 eventi dal log, se vi sono errori di lettura restituisco la lista vuota
     def fetch_recent_events(self, lines=200):
@@ -141,7 +152,7 @@ class BehavioralBlocker:
             pass
 
     def block_ip(self, threat_addr):
-        sas = 2
+        print(f"Bloccaggio di {threat_addr}")
 
     def close_conn(self):
         self.ssh_client.close()
