@@ -5,6 +5,7 @@ from collections import defaultdict, Counter
 from datetime import datetime
 import paramiko
 
+
 class BehavioralBlocker:
     def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, treeshold):
         self.ssh_client = None
@@ -28,7 +29,6 @@ class BehavioralBlocker:
 
         print("Behavioral Blocker avviato")
         print(f"Soglia: {self.ALERT_THREESHOLD}, alert in {self.TIME_WINDOW} secondi")
-
 
     # Stabilisco una connessione SSH ad OPNsense e gestisco errori nella connessione
     def connect_ssh(self):
@@ -117,7 +117,8 @@ class BehavioralBlocker:
                 except Exception:
                     continue
 
-            print(f"[{datetime.now()}] --> Recuperati {new_events} eventi nuovi da analizzare (eventi totali: {len(events)})")
+            print(
+                f"[{datetime.now()}] --> Recuperati {new_events} eventi nuovi da analizzare (eventi totali: {len(events)})")
             # print(events)
             return events
 
@@ -143,7 +144,6 @@ class BehavioralBlocker:
             # Analisi del tipo di attacco
             alert_info = event.get('alert', {})
             signature = alert_info.get('signature', '').lower()
-
 
             # Classifico il tipo di attacco
             def get_attack_type(signature):
@@ -192,6 +192,7 @@ class BehavioralBlocker:
         self.ssh_client.close()
         print("\nConnessione ad SSH chiusa")
 
+
 if __name__ == "__main__":
     import argparse
 
@@ -207,13 +208,13 @@ if __name__ == "__main__":
 
     print(args.host, "\n", args.port, "\n", args.user, "\n", args.pwrd, "\n")
 
-    protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd, treeshold=args.treeshold)
+    protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd,
+                                       treeshold=args.treeshold)
     protection_sys.ALERT_THREESHOLD = args.treeshold
     # print (protection_sys.ALERT_THREESHOLD)
 
     connected = protection_sys.connect_ssh()
 
     if connected:
-
         protection_sys.continuous_monitoring(connected)
         protection_sys.close_conn()
