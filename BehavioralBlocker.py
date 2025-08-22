@@ -190,7 +190,7 @@ class BehavioralBlocker:
 
     def close_conn(self):
         self.ssh_client.close()
-        print("\nConnessione ad SSH chiusa")
+        print(f"\nConnessione SSH a {self.ssh_host} chiusa")
 
 
 if __name__ == "__main__":
