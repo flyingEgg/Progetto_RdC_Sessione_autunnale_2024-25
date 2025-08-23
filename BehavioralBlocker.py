@@ -79,7 +79,8 @@ class BehavioralBlocker:
         return hashlib.md5(unique_id.encode()).hexdigest()
 
     def fetch_recent_events(self, lines=200):
-        """Restituisco una lista degli ultimi 200 eventi dal log, se vi sono errori di lettura restituisco la lista vuota"""
+        """Restituisco una lista degli ultimi 200 eventi dal log,
+        se vi sono errori di lettura restituisco la lista vuota"""
         try:
             if self.last_event_time:
                 cmd = f'tail -n 500 /var/log/suricata/eve.json | grep -v "^$"'
@@ -93,6 +94,8 @@ class BehavioralBlocker:
             for line in stdout:
                 try:
                     event = json.loads(line.strip())
+
+                    # Ignora eventi non alert
                     if event.get('event_type') != 'alert':
                         continue
 
@@ -131,7 +134,6 @@ class BehavioralBlocker:
 
     def analyze_events(self, events):
         """Analizza gli eventi basandosi sui pattern di comportamento"""
-
         threats = []
 
         # Salta eventi malformati senza campo 'src_ip'
@@ -139,8 +141,6 @@ class BehavioralBlocker:
             src_ip = event.get('src_ip')
             if not src_ip:
                 continue
-
-                # ____________________________________________________________________ non so se ignorare ip domestici, ci penserò
 
             # Parsing del timestamp con conversione in oggetto datetime
             event_time = self.parse_timestamp(event)
@@ -166,6 +166,7 @@ class BehavioralBlocker:
 
         return threats
 
+    # Monitora gli alerts, con periodici aggiornamenti
     def continuous_monitoring(self, connected):
         try:
             while True:
