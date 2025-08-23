@@ -192,6 +192,43 @@ class BehavioralBlocker:
 
         return threats
 
+    def show_stats(self):
+        """Statistiche attuali"""
+        print(f"\nCURRENT STATS [{datetime.now().strftime('%H:%M:%S')}]")
+        print(f"Monitored IPs: {len(self.ip_alerts)}")
+        print(f"Blocked IPs: {len(self.blocked_ips)}")
+
+        if self.blocked_ips:
+            print(f"Blocked: {', '.join(list(self.blocked_ips)[:5])}")
+
+        # Mostra gli indirizzi più sospetti
+        active_ips = []
+        current_time = datetime.now().replace(tzinfo=datetime.now().astimezone().tzinfo)
+
+        for ip, alerts in self.ip_alerts.items():
+            recent_count = 0
+            for alert_time in alerts:
+                try:
+                    # Assicura compatibilità fascia oraria
+                    if alert_time.tzinfo is None:
+                        alert_time = alert_time.replace(tzinfo=current_time.tzinfo)
+
+                    if (current_time - alert_time).total_seconds() <= self.TIME_WINDOW:
+                        recent_count += 1
+                except TypeError:
+                    continue
+
+            if recent_count > 0:
+                active_ips.append((ip, recent_count))
+
+        if active_ips:
+            active_ips.sort(key=lambda x: x[1], reverse=True)
+            print("Most active IPs:")
+            for ip, count in active_ips[:3]:
+                print(f"   {ip}: {count} recent alerts")
+
+        print("-" * 50)
+
     # Monitora gli alerts, con periodici aggiornamenti
     def continuous_monitoring(self, connected):
         try:
@@ -203,27 +240,39 @@ class BehavioralBlocker:
 
                 events = self.fetch_recent_events()
 
-                time.sleep(self.ALERT_REFRESH)
-
                 if events:
                     threats = self.analyze_events(events)
                     print(threats)
 
-                # if events:
-                #     threats = self.analyze_events(events)
-                #
-                # for threat in threats:
-                #     if threat['risk_level'] == 'HIGH':
-                #         self.block_ip(threat)
-                #     else:
-                #         print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
+                    for threat in threats:
+                        if threat['threat_level'] == 'HIGH':
+                            self.block_ip(threat)
+                        else:
+                            print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
 
-
+                self.show_stats()
+                time.sleep(self.ALERT_REFRESH)
         except KeyboardInterrupt:
+            self.close_conn()
             pass
 
-    def block_ip(self, threat_addr):
-        print(f"Bloccaggio di {threat_addr}")
+    def block_ip(self, threat_info):
+        ip = threat_info['ip']
+
+        print("\nMINACCIA RILEVATA")
+        print(f"Ip: {threat_info['ip']}")
+        print(f"Nr. di alerts: {threat_info['alert_count']}")
+        print(f"Classe di attacchi: {threat_info['attack_types']}")
+        print(f"Livello di minaccia: {threat_info['threat_level']}")
+
+        # Devo implementare un bloccaggio via pyopnsense API
+        self.blocked_ips.add(ip)
+
+        with open('blocked_ips.log', 'a') as f:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            f.write(f"[{timestamp}] BLOCKED: {ip} - {threat_info['alert_count']} alerts\n")
+
+        return True
 
     def close_conn(self):
         self.ssh_client.close()
@@ -239,8 +288,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, help='SSH port (default: 22)', default=22)
     parser.add_argument('--user', type=str, help='Username', default='root')
     parser.add_argument('--pwrd', type=str, help='Password', default='opnsense')
-    parser.add_argument('--tsld', type=int, help='No. of alerts before triggering block (default: 5)', default=5)
-    parser.add_argument('--rfrs', type=int, help='Refresh alerts rate time', default=10)
+    parser.add_argument('--tsld', type=int, help='Nr. di alerts prima di innescare blacklist (default: 5)', default=5)
+    parser.add_argument('--rfrs', type=int, help='Refresh rate lettura log', default=10)
 
     args = parser.parse_args()
 
@@ -255,4 +304,3 @@ if __name__ == "__main__":
 
     if connected:
         protection_sys.continuous_monitoring(connected)
-        protection_sys.close_conn()
