@@ -153,7 +153,8 @@ class BehavioralBlocker:
                     return 'bruteforce'
                 elif any(word in signature for word in ['exploit', 'attack', 'payload']):
                     return 'exploit'
-                return 'unknown'
+                elif any(word in signature for word in ['sql', 'injection', 'mysql', '3306']):
+                    return 'sqlinjection'
 
             attack_type = get_attack_type(signature)
             print(attack_type)
