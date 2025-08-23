@@ -7,7 +7,7 @@ import paramiko
 
 
 class BehavioralBlocker:
-    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, treeshold):
+    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, alrt_tsld, alrt_rfrs):
         self.ssh_client = None
         self.ssh_host = ssh_host
         self.ssh_port = ssh_port
@@ -25,10 +25,13 @@ class BehavioralBlocker:
 
         # Soglie
         self.TIME_WINDOW = 300  # 5 minuti
-        self.ALERT_THREESHOLD = treeshold  # nr. max di alert entro la time window
+        self.ALERT_THREESHOLD = alrt_tsld  # nr. max di alert entro la time window
+        self.ALERT_REFRESH = alrt_rfrs
 
         print("Behavioral Blocker avviato")
-        print(f"Soglia: {self.ALERT_THREESHOLD}, alert in {self.TIME_WINDOW} secondi")
+        print(f"Soglia di rilevamento: {self.ALERT_THREESHOLD},"
+              f"alert in {self.TIME_WINDOW} secondi,"
+              f"refresh rate: {self.ALERT_REFRESH}\n")
 
     # Stabilisco una connessione SSH ad OPNsense e gestisco errori nella connessione
     def connect_ssh(self):
@@ -86,7 +89,7 @@ class BehavioralBlocker:
             stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
 
             events = []
-            new_events = 0
+            tot_events = 0
             for line in stdout:
                 try:
                     event = json.loads(line.strip())
@@ -94,6 +97,7 @@ class BehavioralBlocker:
                         continue
 
                     event_id = self.create_event_id(event)
+                    tot_events += 1
 
                     # Salta evento se già precedentemente processato
                     if event_id in self.processed_events:
@@ -108,7 +112,6 @@ class BehavioralBlocker:
                     # Se arrivo qui, significa che l'evento è nuovo
                     events.append(event)
                     self.processed_events.add(event_id)
-                    new_events += 1
 
                     # Aggiorno il periodo dell'ultimo evento
                     if self.last_event_time or event_time > self.last_event_time:
@@ -117,8 +120,8 @@ class BehavioralBlocker:
                 except Exception:
                     continue
 
-            print(
-                f"[{datetime.now()}] --> Recuperati {new_events} eventi nuovi da analizzare (eventi totali: {len(events)})")
+            print(f"[{datetime.now()}] --> Recuperati {len(events)} eventi nuovi"
+                  f" da analizzare (eventi totali: {tot_events})")
             # print(events)
             return events
 
@@ -127,6 +130,8 @@ class BehavioralBlocker:
             return []
 
     def analyze_events(self, events):
+        """Analizza gli eventi basandosi sui pattern di comportamento"""
+
         threats = []
 
         # Salta eventi malformati senza campo 'src_ip'
@@ -171,7 +176,7 @@ class BehavioralBlocker:
 
                 events = self.fetch_recent_events()
 
-                time.sleep(10)
+                time.sleep(self.ALERT_REFRESH)
 
                 # if events:
                 #     threats = self.analyze_events(events)
@@ -199,19 +204,20 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Sistema di protezione ed analisi comportamentale')
 
-    parser.add_argument('--host', help='Indirizzo IP di OPNsense (default: 192.168.1.250)', default='192.168.1.250')
-    parser.add_argument('--port', type=int, help='Porta SSH (default: 22)', default=22)
+    parser.add_argument('--host', help='OPNsense IP addr (default: 192.168.1.250)', default='192.168.1.250')
+    parser.add_argument('--port', type=int, help='SSH port (default: 22)', default=22)
     parser.add_argument('--user', type=str, help='Username', default='root')
     parser.add_argument('--pwrd', type=str, help='Password', default='opnsense')
-    parser.add_argument('--treeshold', type=int, help='Soglia di tempo alert (default: 5)', default=5)
+    parser.add_argument('--tsld', type=int, help='No. of alerts before triggering block (default: 5)', default=5)
+    parser.add_argument('--rfrs', type=int, help='Refresh alerts rate time', default=10)
 
     args = parser.parse_args()
 
     print(args.host, "\n", args.port, "\n", args.user, "\n", args.pwrd, "\n")
 
-    protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user, ssh_pass=args.pwrd,
-                                       treeshold=args.treeshold)
-    protection_sys.ALERT_THREESHOLD = args.treeshold
+    protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user,
+                                       ssh_pass=args.pwrd, alrt_tsld=args.tsld, alrt_rfrs=args.rfrs)
+
     # print (protection_sys.ALERT_THREESHOLD)
 
     connected = protection_sys.connect_ssh()
