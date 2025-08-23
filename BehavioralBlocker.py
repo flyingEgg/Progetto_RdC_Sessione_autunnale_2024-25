@@ -2,7 +2,7 @@ import json
 import socket
 import time
 from collections import defaultdict, Counter
-from datetime import datetime
+from datetime import datetime, timezone
 import paramiko
 
 
@@ -27,6 +27,8 @@ class BehavioralBlocker:
         self.TIME_WINDOW = 300  # 5 minuti
         self.ALERT_THREESHOLD = alrt_tsld  # nr. max di alert entro la time window
         self.ALERT_REFRESH = alrt_rfrs
+
+        self.tot_events = 0
 
         print("Behavioral Blocker avviato")
         print(f"Soglia di rilevamento: {self.ALERT_THREESHOLD},"
@@ -90,7 +92,7 @@ class BehavioralBlocker:
             stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
 
             events = []
-            tot_events = 0
+
             for line in stdout:
                 try:
                     event = json.loads(line.strip())
@@ -100,7 +102,6 @@ class BehavioralBlocker:
                         continue
 
                     event_id = self.create_event_id(event)
-                    tot_events += 1
 
                     # Salta evento se già precedentemente processato
                     if event_id in self.processed_events:
@@ -115,6 +116,7 @@ class BehavioralBlocker:
                     # Se arrivo qui, significa che l'evento è nuovo
                     events.append(event)
                     self.processed_events.add(event_id)
+                    self.tot_events += 1
 
                     # Aggiorno il periodo dell'ultimo evento
                     if self.last_event_time or event_time > self.last_event_time:
@@ -124,7 +126,7 @@ class BehavioralBlocker:
                     continue
 
             print(f"[{datetime.now()}] --> Recuperati {len(events)} eventi nuovi"
-                  f" da analizzare (eventi totali: {tot_events})")
+                  f" da analizzare (eventi totali: {self.tot_events})")
             # print(events)
             return events
 
@@ -134,6 +136,7 @@ class BehavioralBlocker:
 
     def analyze_events(self, events):
         """Analizza gli eventi basandosi sui pattern di comportamento"""
+        current_time = datetime.now()
         threats = []
 
         # Salta eventi malformati senza campo 'src_ip'
@@ -144,7 +147,6 @@ class BehavioralBlocker:
 
             # Parsing del timestamp con conversione in oggetto datetime
             event_time = self.parse_timestamp(event)
-            print(event_time)
 
             # Analisi del tipo di attacco
             alert_info = event.get('alert', {})
@@ -152,17 +154,41 @@ class BehavioralBlocker:
 
             # Classifico il tipo di attacco
             def get_attack_type(signature):
-                if any(word in signature for word in ['scan', 'reconnaissance', 'nmap', 'port']):
+                if any(word in signature for word in ['nmap', 'NMAP', 'reconnaissance', 'port scan', 'PORT SCAN']):
                     return 'portscan'
-                elif any(word in signature for word in ['brute', 'force', 'login']):
+                elif any(word in signature for word in ['brute', 'force', 'login', 'ssh', 'frequent']):
                     return 'bruteforce'
                 elif any(word in signature for word in ['exploit', 'attack', 'payload']):
                     return 'exploit'
                 elif any(word in signature for word in ['sql', 'injection', 'mysql', '3306']):
                     return 'sqlinjection'
+                else:
+                    return 'unknown'
 
             attack_type = get_attack_type(signature)
-            print(attack_type)
+
+            # Salvo l'alert
+            self.ip_alerts[src_ip].append(event_time)
+            self.ip_attack_types[src_ip][attack_type] +=1
+
+        for ip in self.ip_alerts:
+            if ip in self.blocked_ips:
+                continue
+
+            recent_alerts = [
+                t for t in self.ip_alerts[ip]
+                if (datetime.now(timezone.utc) - t).total_seconds() <= self.TIME_WINDOW
+            ]
+
+            # Se il numero di alerts di un IP supera la soglia impostata, scatta la blacklist di esso
+            if len(recent_alerts) >= self.ALERT_THREESHOLD:
+                threat={
+                    "ip": ip,
+                    "alert_count": len(recent_alerts),
+                    "attack_types": dict(self.ip_attack_types[ip]),
+                    "threat_level": 'HIGH' if len(recent_alerts) > (self.ALERT_THREESHOLD * 2) else 'MEDIUM'
+                }
+                threats.append(threat)
 
         return threats
 
@@ -178,6 +204,10 @@ class BehavioralBlocker:
                 events = self.fetch_recent_events()
 
                 time.sleep(self.ALERT_REFRESH)
+
+                if events:
+                    threats = self.analyze_events(events)
+                    print(threats)
 
                 # if events:
                 #     threats = self.analyze_events(events)
