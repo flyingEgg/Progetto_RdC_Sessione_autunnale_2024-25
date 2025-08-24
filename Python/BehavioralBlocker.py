@@ -4,12 +4,11 @@ import time
 from collections import defaultdict, Counter
 from datetime import datetime, timezone
 import paramiko
-
-from Python.EventFilter import EventFilter
+from EventFilter import EventFilter
 
 
 class BehavioralBlocker:
-    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, alrt_tsld, alrt_rfrs):
+    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, alrt_tsld, alrt_rfsh):
         self.ssh_client = None
         self.ssh_host = ssh_host
         self.ssh_port = ssh_port
@@ -28,7 +27,7 @@ class BehavioralBlocker:
         # Soglie
         self.TIME_WINDOW = 300              # 5 minuti
         self.ALERT_THREESHOLD = alrt_tsld   # nr. max di alert entro la time window
-        self.ALERT_REFRESH = alrt_rfrs      # frequenza di aggiornamento dal log
+        self.ALERT_REFRESH = alrt_rfsh      # frequenza di aggiornamento dal log
 
         self.event_filter = EventFilter(self.ssh_host)
 
@@ -168,7 +167,7 @@ class BehavioralBlocker:
                     return 'bruteforce'
                 elif any(word in signature for word in ['exploit', 'attack', 'payload']):
                     return 'exploit'
-                elif any(word in signature for word in ['sql', 'injection', 'mysql', '3306']):
+                elif any(word in signature for word in ['sql', 'SQL', 'injection', 'SQLi', '3306']):
                     return 'sqlinjection'
                 else:
                     return 'unknown'
@@ -258,7 +257,7 @@ class BehavioralBlocker:
                         else:
                             print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
 
-                self.show_stats()
+                # self.show_stats()
                 time.sleep(self.ALERT_REFRESH)
         except KeyboardInterrupt:
             self.close_conn()
@@ -297,14 +296,14 @@ if __name__ == "__main__":
     parser.add_argument('--user', type=str, help='Username', default='root')
     parser.add_argument('--pwrd', type=str, help='Password', default='opnsense')
     parser.add_argument('--tsld', type=int, help='Nr. di alerts prima di innescare blacklist (default: 5)', default=5)
-    parser.add_argument('--rfrs', type=int, help='Refresh rate lettura log', default=10)
+    parser.add_argument('--rfsh', type=int, help='Refresh rate lettura log', default=10)
 
     args = parser.parse_args()
 
     print(args.host, "\n", args.port, "\n", args.user, "\n", args.pwrd, "\n")
 
     protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user,
-                                       ssh_pass=args.pwrd, alrt_tsld=args.tsld, alrt_rfrs=args.rfrs)
+                                       ssh_pass=args.pwrd, alrt_tsld=args.tsld, alrt_rfsh=args.rfsh)
 
     # print (protection_sys.ALERT_THREESHOLD)
 
