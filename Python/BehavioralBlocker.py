@@ -300,7 +300,6 @@ class BehavioralBlocker:
                     "destination": "any",
                     "description": f"BLOCCO a causa di: {threat_info['attack_types']} -- alerts causati: {threat_info['alert_count']}",
                     "log": "1",
-                    "position": "0"
                 }
             }
 
