@@ -5,6 +5,8 @@ from collections import defaultdict, Counter
 from datetime import datetime, timezone
 import paramiko
 
+from Python.EventFilter import EventFilter
+
 
 class BehavioralBlocker:
     def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, alrt_tsld, alrt_rfrs):
@@ -24,16 +26,18 @@ class BehavioralBlocker:
         self.last_event_time = None
 
         # Soglie
-        self.TIME_WINDOW = 300  # 5 minuti
-        self.ALERT_THREESHOLD = alrt_tsld  # nr. max di alert entro la time window
-        self.ALERT_REFRESH = alrt_rfrs
+        self.TIME_WINDOW = 300              # 5 minuti
+        self.ALERT_THREESHOLD = alrt_tsld   # nr. max di alert entro la time window
+        self.ALERT_REFRESH = alrt_rfrs      # frequenza di aggiornamento dal log
+
+        self.event_filter = EventFilter(self.ssh_host)
 
         self.tot_events = 0
 
         print("Behavioral Blocker avviato")
         print(f"Soglia di rilevamento: {self.ALERT_THREESHOLD},"
               f"alert in {self.TIME_WINDOW} secondi,"
-              f"refresh rate: {self.ALERT_REFRESH}\n")
+              f"refresh rate: {self.ALERT_REFRESH} s\n")
 
     # Stabilisco una connessione SSH ad OPNsense e gestisco errori nella connessione
     def connect_ssh(self):
@@ -41,7 +45,7 @@ class BehavioralBlocker:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh_client.connect(self.ssh_host, self.ssh_port, self.ssh_user, self.ssh_pass, timeout=10)
-            print("Connesso ad SSH")
+            print(f"Connesso ad OPNsense ({self.ssh_host}) via SSH")
             return True
         except paramiko.AuthenticationException:
             print("Errore di autenticazione SSH")
@@ -143,6 +147,10 @@ class BehavioralBlocker:
         for event in events:
             src_ip = event.get('src_ip')
             if not src_ip:
+                continue
+
+            # Salta eventi non malevoli (es apt update del server)
+            if self.event_filter.is_benign(event):
                 continue
 
             # Parsing del timestamp con conversione in oggetto datetime
