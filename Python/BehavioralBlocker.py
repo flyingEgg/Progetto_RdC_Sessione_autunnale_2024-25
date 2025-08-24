@@ -262,6 +262,7 @@ class BehavioralBlocker:
             self.close_conn()
             pass
 
+    # Bloccaggio di ip minaccioso mediante creazione apposita regola di firewall
     def block_ip(self, threat_info):
         ip = threat_info['ip']
 
