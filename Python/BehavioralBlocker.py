@@ -37,8 +37,8 @@ class BehavioralBlocker:
         print(f"Indirizzi bloccati se generano {self.ALERT_THREESHOLD} alerts in {self.TIME_WINDOW} secondi")
         print(f"refresh rate: {self.ALERT_REFRESH} s\n")
 
-    # Stabilisco una connessione SSH ad OPNsense e gestisco errori nella connessione
     def connect_ssh(self):
+        """Stabilisco una connessione SSH ad OPNsense e gestisco eventuali errori di connessione"""
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -129,7 +129,6 @@ class BehavioralBlocker:
 
             print(f"[{datetime.now()}] --> Recuperati {len(events)} eventi nuovi"
                   f" da analizzare (eventi totali: {self.tot_events})")
-            # print(events)
             return events
 
         except Exception as e:
@@ -138,7 +137,6 @@ class BehavioralBlocker:
 
     def analyze_events(self, events):
         """Analizza gli eventi basandosi sui pattern di comportamento"""
-        current_time = datetime.now()
         threats = []
 
         # Salta eventi malformati senza campo 'src_ip'
@@ -235,8 +233,8 @@ class BehavioralBlocker:
 
         print("-" * 50)
 
-    # Monitora gli alerts, con periodici aggiornamenti
     def continuous_monitoring(self, connected):
+        """Monitora gli alerts, con periodici aggiornamenti sino interruzione dell'utente"""
         try:
             while True:
                 if not connected:
@@ -248,7 +246,6 @@ class BehavioralBlocker:
 
                 if events:
                     threats = self.analyze_events(events)
-                    print(threats)
 
                     for threat in threats:
                         if threat['threat_level'] == 'HIGH':
@@ -262,8 +259,8 @@ class BehavioralBlocker:
             self.close_conn()
             pass
 
-    # Bloccaggio di ip minaccioso mediante creazione apposita regola di firewall
     def block_ip(self, threat_info):
+        """Bloccaggio di ip minaccioso mediante creazione apposita regola di firewall"""
         ip = threat_info['ip']
 
         print("\nMINACCIA RILEVATA")
@@ -299,7 +296,7 @@ class BehavioralBlocker:
                     "direction": "in",
                     "protocol": "any",
                     "source": ip,
-                    "source_net": ip,
+                    "source_net": net,
                     "destination": "any",
                     "description": f"BLOCCO a causa di: {threat_info['attack_types']} -- alerts causati: {threat_info['alert_count']}",
                     "log": "1",
@@ -368,8 +365,6 @@ if __name__ == "__main__":
 
     protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user,
                                        ssh_pass=args.pwrd, alrt_tsld=args.tsld, alrt_rfsh=args.rfsh)
-
-    # print (protection_sys.ALERT_THREESHOLD)
 
     connected = protection_sys.connect_ssh()
 
