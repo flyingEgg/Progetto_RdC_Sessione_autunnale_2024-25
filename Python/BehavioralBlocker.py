@@ -34,9 +34,8 @@ class BehavioralBlocker:
         self.tot_events = 0
 
         print("Behavioral Blocker avviato")
-        print(f"Soglia di rilevamento: {self.ALERT_THREESHOLD},"
-              f"alert in {self.TIME_WINDOW} secondi,"
-              f"refresh rate: {self.ALERT_REFRESH} s\n")
+        print(f"Indirizzi bloccati se generano {self.ALERT_THREESHOLD} alerts in {self.TIME_WINDOW} secondi")
+        print(f"refresh rate: {self.ALERT_REFRESH} s\n")
 
     # Stabilisco una connessione SSH ad OPNsense e gestisco errori nella connessione
     def connect_ssh(self):
@@ -272,12 +271,76 @@ class BehavioralBlocker:
         print(f"Classe di attacchi: {threat_info['attack_types']}")
         print(f"Livello di minaccia: {threat_info['threat_level']}")
 
-        # Devo implementare un bloccaggio via pyopnsense API
+        # Bloccaggio dell'ip
+        try:
+            import requests
+            import json
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+            host = self.ssh_host
+            api_key = "ZUAoK6FdsctPNn/r+nG2rmp9Au19zzrYOZ/SWY6QVwO27041pZfhiWWP1+pARZiVLYlw48gszPQaB6tI"
+            api_secret = "6Hcr/30aAqMhi5GlzumuYh+x7y6WmAsO7ByvbL6SAee1A8HWoaD6FeHg2bXOhvVVskxuRFOAJQtYiirY"
+            url = f"https://{host}/api/firewall/filter/add_rule"
+
+            # Estrazione indirizzo di rete
+            octets = ip.split('.')
+            octets[-1] = '0'
+            net = '.'.join(octets)
+
+            # Payload con i dati della regola
+            payload = {
+                "rule": {
+                    "enabled": "1",
+                    "action": "block",
+                    "quick": "1",
+                    "interface": "opt1",
+                    "direction": "in",
+                    "protocol": "any",
+                    "source": ip,
+                    "source_net": ip,
+                    "destination": "any",
+                    "description": f"BLOCCO a causa di: {threat_info['attack_types']} -- alerts causati: {threat_info['alert_count']}",
+                    "log": "1",
+                    "position": "0"
+                }
+            }
+
+            # Chiamata API
+            response = requests.post(
+                url,
+                auth=(api_key, api_secret),
+                json=payload,
+                verify=False,
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("result") == "saved":
+                    print(f"Regola firewall creata per bloccare {ip}")
+
+                    # Applica le modifiche
+                    apply_url = f"https://{host}/api/firewall/filter/apply"
+                    apply_response = requests.post(apply_url, auth=(api_key, api_secret), verify=False)
+
+                    if apply_response.status_code == 200:
+                        print("Configurazione applicata")
+                    else:
+                        print("Configurazione non applicata")
+                else:
+                    print(f"Errore: {result}")
+            else:
+                print(f"Errore HTTP: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            print(f"Errore: {e}")
+
         self.blocked_ips.add(ip)
 
         with open('blocked_ips.log', 'a') as f:
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{timestamp}] BLOCKED: {ip} - {threat_info['alert_count']} alerts\n")
+            f.write(f"[{timestamp}] {ip} - {threat_info['alert_count']} alerts\n")
 
         return True
 
