@@ -5,6 +5,7 @@ from collections import defaultdict, Counter
 from datetime import datetime, timezone
 import paramiko
 from EventFilter import EventFilter
+import threat_detection_config
 
 
 class BehavioralBlocker:
@@ -25,8 +26,9 @@ class BehavioralBlocker:
         self.last_event_time = None
 
         # Soglie
-        self.TIME_WINDOW = 300              # 5 minuti
-        self.ALERT_THREESHOLD = alrt_tsld   # nr. max di alert entro la time window
+        # self.TIME_WINDOW = 300              # 5 minuti
+        # self.ALERT_THREESHOLD = alrt_tsld   # nr. max di alert entro la time window
+        self.THRESHOLDS = threat_detection_config.THRESHOLDS
         self.ALERT_REFRESH = alrt_rfsh      # frequenza di aggiornamento dal log
 
         self.event_filter = EventFilter(self.ssh_host)
@@ -34,9 +36,7 @@ class BehavioralBlocker:
         self.tot_events = 0
 
         print("Behavioral Blocker avviato")
-        print(f"Soglia di rilevamento: {self.ALERT_THREESHOLD},"
-              f"alert in {self.TIME_WINDOW} secondi,"
-              f"refresh rate: {self.ALERT_REFRESH} s\n")
+        print(f"refresh rate: {self.ALERT_REFRESH} s\n")
 
     # Stabilisco una connessione SSH ad OPNsense e gestisco errori nella connessione
     def connect_ssh(self):
@@ -162,38 +162,43 @@ class BehavioralBlocker:
             # Classifico il tipo di attacco
             def get_attack_type(signature):
                 if any(word in signature for word in ['nmap', 'NMAP', 'reconnaissance', 'port scan', 'PORT SCAN']):
-                    return 'portscan'
+                    return 'port_scan'
                 elif any(word in signature for word in ['brute', 'force', 'login', 'ssh', 'frequent']):
-                    return 'bruteforce'
+                    return 'brute_force'
                 elif any(word in signature for word in ['exploit', 'attack', 'payload']):
                     return 'exploit'
                 elif any(word in signature for word in ['sql', 'SQL', 'injection', 'SQLi', '3306']):
-                    return 'sqlinjection'
+                    return 'sql_injection'
                 else:
                     return 'unknown'
 
             attack_type = get_attack_type(signature)
 
             # Salvo l'alert
-            self.ip_alerts[src_ip].append(event_time)
+            self.ip_alerts[src_ip].append({
+                'time': event_time,
+                'attack_type': attack_type
+            })
             self.ip_attack_types[src_ip][attack_type] +=1
 
         for ip in self.ip_alerts:
             if ip in self.blocked_ips:
                 continue
 
+            latest_attack_type = (self.ip_alerts[ip])[-1]['attack_type']
+
             recent_alerts = [
-                t for t in self.ip_alerts[ip]
-                if (datetime.now(timezone.utc) - t).total_seconds() <= self.TIME_WINDOW
+                alert for alert in self.ip_alerts[ip]
+                if (datetime.now(timezone.utc) - alert['time']).total_seconds() <= self.THRESHOLDS[latest_attack_type].get('time_window')
             ]
 
             # Se il numero di alerts di un IP supera la soglia impostata, scatta la blacklist di esso
-            if len(recent_alerts) >= self.ALERT_THREESHOLD:
+            if len(recent_alerts) >= self.THRESHOLDS[ip['attack_type']['alerts_no']]:
                 threat={
                     "ip": ip,
                     "alert_count": len(recent_alerts),
                     "attack_types": dict(self.ip_attack_types[ip]),
-                    "threat_level": 'HIGH' if len(recent_alerts) > (self.ALERT_THREESHOLD * 2) else 'MEDIUM'
+                    "threat_level": 'HIGH' if len(recent_alerts) > (self.THRESHOLDS[ip['attack_type']['alerts_no']] * 2) else 'MEDIUM'
                 }
                 threats.append(threat)
 
@@ -220,7 +225,7 @@ class BehavioralBlocker:
                     if alert_time.tzinfo is None:
                         alert_time = alert_time.replace(tzinfo=current_time.tzinfo)
 
-                    if (current_time - alert_time).total_seconds() <= self.TIME_WINDOW:
+                    if (current_time - alert_time).total_seconds() <= self.THRESHOLDS[ip['attack_type']['time_window']]:
                         recent_count += 1
                 except TypeError:
                     continue
