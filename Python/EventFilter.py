@@ -6,6 +6,8 @@ class EventFilter:
             "ET POLICY GNU/Linux APT User-Agent Outbound likely related to package management",
             "ET POLICY Outbound Debian APT User-Agent",
             "ET POLICY Ubuntu APT User-Agent"
+            "ET USER_AGENTS Microsoft Device Metadata Retrieval Client User-Agent"
+            "ET SCAN Non-Allowed Host Tried to Connect to MySQL Server"
         }
 
         self.WHITELIST_IPS = {ip_addr}
