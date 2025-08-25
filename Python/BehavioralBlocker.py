@@ -38,7 +38,7 @@ class BehavioralBlocker:
         print(f"refresh rate: {self.ALERT_REFRESH} secondi\n")
 
     def connect_ssh(self):
-        """Stabilisco una connessione SSH ad OPNsense e gestisco eventuali errori di connessione"""
+        """Stabilisce una connessione SSH ad OPNsense e gestisco eventuali errori di connessione"""
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -83,7 +83,7 @@ class BehavioralBlocker:
         return hashlib.md5(unique_id.encode()).hexdigest()
 
     def fetch_recent_events(self, lines=200):
-        """Restituisco una lista degli ultimi 200 eventi dal log,
+        """Restituisce una lista degli ultimi 200 eventi dal log,
         se vi sono errori di lettura restituisco la lista vuota"""
         try:
             if self.last_event_time:
@@ -168,8 +168,6 @@ class BehavioralBlocker:
                     return 'portscan'
                 elif any(word in signature for word in ['brute', 'force', 'login', 'ssh', 'frequent']):
                     return 'bruteforce'
-                elif any(word in signature for word in ['exploit', 'attack', 'payload']):
-                    return 'exploit'
                 elif any(word in signature for word in ['sql', 'SQL', 'injection', 'SQLi', '3306', 'UNION', 'SELECT']):
                     return 'sqlinjection'
                 elif any (word in signature for word in ['flood', 'heavy', 'DOS', 'DoS', 'DDoS']):
@@ -203,31 +201,6 @@ class BehavioralBlocker:
                 threats.append(threat)
 
         return threats
-
-    def continuous_monitoring(self, connected):
-        """Monitora gli alerts, con periodici aggiornamenti sino interruzione dell'utente"""
-        try:
-            while True:
-                if not connected:
-                    print("Connessione SSH fallita! Riprovo tra 30 secondi...")
-                    time.sleep(30)
-                    continue
-
-                events = self.fetch_recent_events()
-
-                if events:
-                    threats = self.analyze_events(events)
-
-                    for threat in threats:
-                        if threat['threat_level'] == 'ALTO':
-                            self.block_ip(threat)
-                        else:
-                            print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
-
-                time.sleep(self.ALERT_REFRESH)
-        except KeyboardInterrupt:
-            self.close_conn()
-            pass
 
     def block_ip(self, threat_info):
         """Bloccaggio di ip minaccioso mediante creazione apposita regola di firewall"""
@@ -309,7 +282,36 @@ class BehavioralBlocker:
 
         return True
 
+    def continuous_monitoring(self, connected):
+        """Monitora gli alerts, con periodici aggiornamenti sino interruzione dell'utente"""
+        try:
+            while True:
+                if not connected:
+                    print("Connessione SSH fallita! Riprovo tra 30 secondi...")
+                    time.sleep(30)
+                    continue
+
+                events = self.fetch_recent_events()
+
+                if events:
+                    threats = self.analyze_events(events)
+
+                    for threat in threats:
+                        if threat['threat_level'] == 'ALTO':
+                            self.block_ip(threat)
+                        else:
+                            print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
+                            with open('suspicious_ips.log', 'a') as f:
+                                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                f.write(f"[{timestamp}] {threat['ip']} - {threat['alert_count']} alerts\n")
+
+                time.sleep(self.ALERT_REFRESH)
+        except KeyboardInterrupt:
+            self.close_conn()
+            pass
+
     def close_conn(self):
+        """Chiude la connessione SSH"""
         self.ssh_client.close()
         print(f"\nConnessione SSH a {self.ssh_host} chiusa")
 
