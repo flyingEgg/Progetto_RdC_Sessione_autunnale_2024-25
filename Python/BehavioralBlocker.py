@@ -8,7 +8,7 @@ from EventFilter import EventFilter
 
 
 class BehavioralBlocker:
-    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, alrt_tsld, alrt_rfsh):
+    def __init__(self, ssh_host, ssh_port, ssh_user, ssh_pass, alrt_tsld, alrt_wdow, alrt_rfsh, ):
         self.ssh_client = None
         self.ssh_host = ssh_host
         self.ssh_port = ssh_port
@@ -25,7 +25,7 @@ class BehavioralBlocker:
         self.last_event_time = None
 
         # Soglie
-        self.TIME_WINDOW = 300              # 5 minuti
+        self.TIME_WINDOW = alrt_wdow        # finestra di tempo alerts
         self.ALERT_THREESHOLD = alrt_tsld   # nr. max di alert entro la time window
         self.ALERT_REFRESH = alrt_rfsh      # frequenza di aggiornamento dal log
 
@@ -33,9 +33,9 @@ class BehavioralBlocker:
 
         self.tot_events = 0
 
-        print("Behavioral Blocker avviato")
+        print("Behavioral Blocker avviato\n")
         print(f"Indirizzi bloccati se generano {self.ALERT_THREESHOLD} alerts in {self.TIME_WINDOW} secondi")
-        print(f"refresh rate: {self.ALERT_REFRESH} s\n")
+        print(f"refresh rate: {self.ALERT_REFRESH} secondi\n")
 
     def connect_ssh(self):
         """Stabilisco una connessione SSH ad OPNsense e gestisco eventuali errori di connessione"""
@@ -190,7 +190,7 @@ class BehavioralBlocker:
                     "ip": ip,
                     "alert_count": len(recent_alerts),
                     "attack_types": dict(self.ip_attack_types[ip]),
-                    "threat_level": 'HIGH' if len(recent_alerts) > (self.ALERT_THREESHOLD * 2) else 'MEDIUM'
+                    "threat_level": 'ALTO' if len(recent_alerts) > (self.ALERT_THREESHOLD * 2) else 'MEDIO'
                 }
                 threats.append(threat)
 
@@ -198,12 +198,12 @@ class BehavioralBlocker:
 
     def show_stats(self):
         """Statistiche attuali"""
-        print(f"\nCURRENT STATS [{datetime.now().strftime('%H:%M:%S')}]")
-        print(f"Monitored IPs: {len(self.ip_alerts)}")
-        print(f"Blocked IPs: {len(self.blocked_ips)}")
+        print(f"\nSTATISTICHE ATTUALI [{datetime.now().strftime('%H:%M:%S')}]")
+        print(f"Nr. di IP monitorati: {len(self.ip_alerts)}")
+        print(f"IP bloccati: {len(self.blocked_ips)}")
 
         if self.blocked_ips:
-            print(f"Blocked: {', '.join(list(self.blocked_ips)[:5])}")
+            print(f"Bloccato: {', '.join(list(self.blocked_ips)[:5])}")
 
         # Mostra gli indirizzi più sospetti
         active_ips = []
@@ -227,9 +227,9 @@ class BehavioralBlocker:
 
         if active_ips:
             active_ips.sort(key=lambda x: x[1], reverse=True)
-            print("Most active IPs:")
+            print("Indirizzi più attivi:")
             for ip, count in active_ips[:3]:
-                print(f"   {ip}: {count} recent alerts")
+                print(f"   {ip}: {count} alerts recenti")
 
         print("-" * 50)
 
@@ -248,7 +248,7 @@ class BehavioralBlocker:
                     threats = self.analyze_events(events)
 
                     for threat in threats:
-                        if threat['threat_level'] == 'HIGH':
+                        if threat['threat_level'] == 'ALTO':
                             self.block_ip(threat)
                         else:
                             print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
@@ -281,11 +281,6 @@ class BehavioralBlocker:
             api_secret = "6Hcr/30aAqMhi5GlzumuYh+x7y6WmAsO7ByvbL6SAee1A8HWoaD6FeHg2bXOhvVVskxuRFOAJQtYiirY"
             url = f"https://{host}/api/firewall/filter/add_rule"
 
-            # Estrazione indirizzo di rete
-            octets = ip.split('.')
-            octets[-1] = '0'
-            net = '.'.join(octets)
-
             # Payload con i dati della regola
             payload = {
                 "rule": {
@@ -296,7 +291,7 @@ class BehavioralBlocker:
                     "direction": "in",
                     "protocol": "any",
                     "source": ip,
-                    "source_net": net,
+                    "source_net": ip,
                     "destination": "any",
                     "description": f"BLOCCO a causa di: {threat_info['attack_types']} -- alerts causati: {threat_info['alert_count']}",
                     "log": "1",
@@ -355,15 +350,17 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, help='SSH port (default: 22)', default=22)
     parser.add_argument('--user', type=str, help='Username', default='root')
     parser.add_argument('--pwrd', type=str, help='Password', default='opnsense')
-    parser.add_argument('--tsld', type=int, help='Nr. di alerts prima di innescare blacklist (default: 5)', default=5)
+    parser.add_argument('--tsld', type=int, help='Soglia di alerts prima di innescare blacklist (default: 5)', default=5)
+    parser.add_argument('--wdow', type=int, help='Finestra di tempo entro quale superare la soglia (default: 300 s)', default=300)
     parser.add_argument('--rfsh', type=int, help='Refresh rate lettura log', default=10)
 
     args = parser.parse_args()
 
-    print(args.host, "\n", args.port, "\n", args.user, "\n", args.pwrd, "\n")
+    print("Host: ", args.host, "\nPorta: ", args.port, "\nUtente: ", args.user, "\n")
 
     protection_sys = BehavioralBlocker(ssh_host=args.host, ssh_port=args.port, ssh_user=args.user,
-                                       ssh_pass=args.pwrd, alrt_tsld=args.tsld, alrt_rfsh=args.rfsh)
+                                       ssh_pass=args.pwrd, alrt_tsld=args.tsld, alrt_wdow=args.wdow,
+                                       alrt_rfsh=args.rfsh)
 
     connected = protection_sys.connect_ssh()
 
