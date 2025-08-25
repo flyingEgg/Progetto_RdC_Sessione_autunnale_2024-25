@@ -135,6 +135,12 @@ class BehavioralBlocker:
             print(f"Errore di lettura log: {e}")
             return []
 
+    def is_blocked(self, ip_addr):
+        with open('blocked_ips.log') as f:
+            for line in f:
+                if ip_addr in line:
+                    return True
+
     def analyze_events(self, events):
         """Analizza gli eventi basandosi sui pattern di comportamento"""
         threats = []
@@ -178,7 +184,7 @@ class BehavioralBlocker:
             self.ip_attack_types[src_ip][attack_type] +=1
 
         for ip in self.ip_alerts:
-            if ip in self.blocked_ips:
+            if self.is_blocked(ip):
                 continue
 
             recent_alerts = [
@@ -197,43 +203,6 @@ class BehavioralBlocker:
                 threats.append(threat)
 
         return threats
-
-    def show_stats(self):
-        """Statistiche attuali"""
-        print(f"\nSTATISTICHE ATTUALI [{datetime.now().strftime('%H:%M:%S')}]")
-        print(f"Nr. di IP monitorati: {len(self.ip_alerts)}")
-        print(f"IP bloccati: {len(self.blocked_ips)}")
-
-        if self.blocked_ips:
-            print(f"Bloccato: {', '.join(list(self.blocked_ips)[:5])}")
-
-        # Mostra gli indirizzi più sospetti
-        active_ips = []
-        current_time = datetime.now().replace(tzinfo=datetime.now().astimezone().tzinfo)
-
-        for ip, alerts in self.ip_alerts.items():
-            recent_count = 0
-            for alert_time in alerts:
-                try:
-                    # Assicura compatibilità fascia oraria
-                    if alert_time.tzinfo is None:
-                        alert_time = alert_time.replace(tzinfo=current_time.tzinfo)
-
-                    if (current_time - alert_time).total_seconds() <= self.TIME_WINDOW:
-                        recent_count += 1
-                except TypeError:
-                    continue
-
-            if recent_count > 0:
-                active_ips.append((ip, recent_count))
-
-        if active_ips:
-            active_ips.sort(key=lambda x: x[1], reverse=True)
-            print("Indirizzi più attivi:")
-            for ip, count in active_ips[:3]:
-                print(f"   {ip}: {count} alerts recenti")
-
-        print("-" * 50)
 
     def continuous_monitoring(self, connected):
         """Monitora gli alerts, con periodici aggiornamenti sino interruzione dell'utente"""
@@ -255,7 +224,6 @@ class BehavioralBlocker:
                         else:
                             print(f"Indirizzo {threat['ip']} sotto osservazione ({threat['alert_count']} alerts generati)")
 
-                # self.show_stats()
                 time.sleep(self.ALERT_REFRESH)
         except KeyboardInterrupt:
             self.close_conn()
@@ -264,6 +232,9 @@ class BehavioralBlocker:
     def block_ip(self, threat_info):
         """Bloccaggio di ip minaccioso mediante creazione apposita regola di firewall"""
         ip = threat_info['ip']
+
+        if self.is_blocked(ip):
+            return False
 
         print("\nMINACCIA RILEVATA")
         print(f"Ip: {threat_info['ip']}")
@@ -312,16 +283,16 @@ class BehavioralBlocker:
             if response.status_code == 200:
                 result = response.json()
                 if result.get("result") == "saved":
-                    print(f"Regola firewall creata per bloccare {ip}")
+                    print(f"[{datetime.now()}] --> Creata regola per bloccare: {ip}")
 
                     # Applica le modifiche
                     apply_url = f"https://{host}/api/firewall/filter/apply"
                     apply_response = requests.post(apply_url, auth=(api_key, api_secret), verify=False)
 
                     if apply_response.status_code == 200:
-                        print("Configurazione applicata")
+                        print("OK")
                     else:
-                        print("Configurazione non applicata")
+                        print("ERRORE: Configurazione non applicata")
                 else:
                     print(f"Errore: {result}")
             else:
