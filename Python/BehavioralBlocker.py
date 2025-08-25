@@ -164,8 +164,10 @@ class BehavioralBlocker:
                     return 'bruteforce'
                 elif any(word in signature for word in ['exploit', 'attack', 'payload']):
                     return 'exploit'
-                elif any(word in signature for word in ['sql', 'SQL', 'injection', 'SQLi', '3306']):
+                elif any(word in signature for word in ['sql', 'SQL', 'injection', 'SQLi', '3306', 'UNION', 'SELECT']):
                     return 'sqlinjection'
+                elif any (word in signature for word in ['flood', 'heavy', 'DOS', 'DoS', 'DDoS']):
+                    return 'dos'
                 else:
                     return 'unknown'
 
